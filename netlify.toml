@@ -1,0 +1,13 @@
+# Deploys the website (web/) and the API (backend/functions) together on Netlify.
+[build]
+  command = "npm install --prefix web --no-audit --no-fund && npm run build --prefix web"
+  publish = "web/dist"
+  functions = "backend/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

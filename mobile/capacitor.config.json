@@ -1,0 +1,12 @@
+{
+  "appId": "com.nemotron.workbench",
+  "appName": "Nemotron Workbench",
+  "webDir": "www",
+  "backgroundColor": "#0b0e13",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

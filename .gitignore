@@ -1,0 +1,21 @@
+# dependencies / builds
+node_modules/
+dist/
+.netlify/
+
+# secrets: never commit these
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+
+# mobile (generated in CI or by `npm run android:add`)
+mobile/android/
+mobile/ios/
+mobile/www/
+local.properties
+
+# misc
+.DS_Store
+*.log

@@ -1,0 +1,21 @@
+{
+  "name": "nemotron-workbench",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Nemotron Workbench monorepo: backend (API), web (React site) and mobile (Android app).",
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix web install",
+    "dev:api": "npm --prefix backend run dev",
+    "dev:web": "npm --prefix web run dev",
+    "build:web": "npm --prefix web run build",
+    "start": "npm --prefix backend start",
+    "test": "npm --prefix backend test"
+  },
+  "dependencies": {
+    "mongodb": "^6.17.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
