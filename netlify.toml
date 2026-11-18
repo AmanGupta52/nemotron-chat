@@ -1,11 +1,9 @@
-# Deploys the website (web/) and the API (backend/functions) together on Netlify.
+# Netlify hosts the WEBSITE only. The API runs on Render (see render.yaml).
+# Set the environment variable VITE_API_BASE_URL (your Render URL) in Netlify before deploying.
 [build]
-  command = "npm install --prefix web --no-audit --no-fund && npm run build --prefix web"
-  publish = "web/dist"
-  functions = "backend/functions"
-
-[functions]
-  node_bundler = "esbuild"
+  base = "web"
+  command = "npm install --no-audit --no-fund && npm run build"
+  publish = "dist"
 
 [[redirects]]
   from = "/*"

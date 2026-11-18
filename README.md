@@ -15,8 +15,8 @@ A private AI chat workspace for **NVIDIA** models and **free OpenRouter** models
 ```
 nemotron-workbench/
 ├── backend/            API: auth, chat streaming, conversations, models
-│   ├── functions/      Handlers (run as Netlify Functions OR via server.js)
-│   ├── server.js       Standalone Node server (Render, Railway, Docker, VPS …)
+│   ├── functions/      Request handlers
+│   ├── server.js       Node server that runs on Render
 │   ├── tests/          Unit tests (node --test)
 │   └── .env.example    Every server setting, documented
 ├── web/                React + Vite website
@@ -25,8 +25,8 @@ nemotron-workbench/
 ├── .github/workflows/
 │   ├── build-apk.yml   Builds the APK on every push (and on tags → GitHub Release)
 │   └── ci.yml          Backend tests + web build on pull requests
-├── netlify.toml        One-click Netlify deploy of site + API
-├── Dockerfile          Site + API in a single container
+├── netlify.toml        Netlify deploy of the website
+├── render.yaml         Render deploy of the backend
 └── package.json        Convenience scripts
 ```
 
@@ -64,36 +64,31 @@ Open <http://localhost:5173>, create an account, enter the e-mail code, and star
 | `ALLOWED_ORIGINS` | if web and API are on different domains | Comma-separated origins allowed to call the API. The Android app is allowed by default. |
 | `MONGODB_DB` | no | Database name, if it is not in the URI. |
 | `MONGODB_DNS_SERVERS` | no | e.g. `8.8.8.8,1.1.1.1` — fixes `querySrv ECONNREFUSED`. |
-| `PORT`, `TRUST_PROXY`, `SERVE_WEB` | standalone server only | Port (default 8787); set `TRUST_PROXY=true` behind a reverse proxy; `SERVE_WEB=true` also serves `web/dist`. |
+| `PORT`, `TRUST_PROXY` | server | Render sets `PORT` itself; set `TRUST_PROXY=true` on Render. |
 
 **EmailJS template:** it must use the variables `to_email`, `otp_code`, `expires_in_minutes` and `purpose`. In EmailJS → Account → Security, enable **"Allow EmailJS API for non-browser applications"** — without it, e-mail sending from a server is rejected.
 
 ---
 
-## 2. Deploy the backend (and website)
+## 2. Deploy: backend on Render, website on Netlify
 
-The Android app needs a **publicly reachable HTTPS backend**. Pick one option.
+Deploy in this order, because each step needs the URL from the previous one.
 
-### Option A — Netlify (website + API together, recommended)
+### Step 1 — Backend on Render
+1. Push this repo to GitHub. In Render choose **New → Blueprint** and select the repo (it reads `render.yaml`), or **New → Web Service** with *Root Directory* `backend`, *Build Command* `npm install`, *Start Command* `npm start`.
+2. Add the environment variables: `MONGODB_URI`, `AUTH_SECRET`, `EMAILJS_*`, `NVIDIA_API_KEY` / `OPENROUTER_API_KEY`, and `TRUST_PROXY=true`. Leave `ALLOWED_ORIGINS` empty for now.
+3. After deploy, open `https://<your-service>.onrender.com/health`. It must show `{"ok":true}`. This is your **API URL**.
+4. In MongoDB Atlas → Network Access, allow Render's IPs (the simplest option is `0.0.0.0/0`).
 
-1. Push this repository to GitHub, then in Netlify choose **Add new site → Import from Git**. `netlify.toml` already contains the build command, publish folder and functions folder.
-2. In **Site configuration → Environment variables**, add the variables from the table above (`MONGODB_URI`, `AUTH_SECRET`, `EMAILJS_*`, provider keys).
-3. Deploy. Your API address is the site URL, e.g. `https://my-workbench.netlify.app`.
+> Render's free plan sleeps after inactivity, so the first request can take about a minute.
 
-> Netlify limits how long a function may run (10 s by default on the free plan — check your plan). A long AI answer can be cut off. If you see that, use Option B, which has no such limit.
+### Step 2 — Website on Netlify
+1. In Netlify choose **Add new site → Import from Git** and pick the repo. `netlify.toml` already sets the base folder (`web`), build command and publish folder.
+2. Add the environment variable `VITE_API_BASE_URL` = your Render API URL (no trailing slash), then deploy.
+3. Copy your Netlify site URL (for example `https://my-workbench.netlify.app`).
 
-### Option B — Node server / Docker (Render, Railway, Fly.io, a VPS)
-
-```bash
-# plain Node
-cd backend && npm install && npm start
-
-# or Docker (serves the website and the API from one container)
-docker build -t nemotron-workbench .
-docker run -p 8787:8787 --env-file backend/.env -e TRUST_PROXY=true nemotron-workbench
-```
-
-On Render/Railway: create a web service from this repo using the `Dockerfile`, add the environment variables, and set `TRUST_PROXY=true`. Check `https://<your-service>/health` returns `{"ok":true}`.
+### Step 3 — Connect them
+In Render, set `ALLOWED_ORIGINS` to your Netlify site URL (no trailing slash) and redeploy. Without it the browser gets "This origin is not allowed to call the API".
 
 ---
 
@@ -104,7 +99,7 @@ The workflow `.github/workflows/build-apk.yml` builds an installable APK every t
 1. **Create a GitHub repository** and upload / push this whole folder.
 2. In the repository open **Settings → Secrets and variables → Actions → Variables → New repository variable**
    - Name: `API_BASE_URL`
-   - Value: your deployed backend URL from step 2, with no trailing slash, e.g. `https://my-workbench.netlify.app`
+   - Value: your Render API URL from section 2, with no trailing slash, e.g. `https://nemotron-workbench-api.onrender.com`
 3. Open the **Actions** tab → **Build Android APK** → **Run workflow** (or just push a commit).
 4. When the run finishes (about 5–10 minutes), download **nemotron-workbench-apk** from the run's *Artifacts* section and unzip it to get `nemotron-workbench.apk`.
 5. Copy the APK to your phone and install it (Android asks you to allow installing from this source).
@@ -140,7 +135,7 @@ npm run android:open         # optional: open the project in Android Studio
 
 ## API overview
 
-All endpoints live under `/.netlify/functions/` (the standalone server also answers on `/api/`).
+All endpoints live under `/.netlify/functions/` (also on `/api/`).
 
 | Endpoint | Purpose |
 | --- | --- |
@@ -172,7 +167,7 @@ Browsers authenticate with an HttpOnly cookie. Clients that send `X-Auth-Mode: b
 | "This origin is not allowed to call the API" | Add the website's origin to `ALLOWED_ORIGINS` on the backend. |
 | App says it was built without an API address | Set the `API_BASE_URL` repository variable and re-run the workflow. |
 | Chat requests fail with "The authentication service is temporarily unavailable" | Check the backend log: `MONGODB_URI` / `AUTH_SECRET` missing, or `AUTH_SECRET` still the placeholder. |
-| Answers get cut off on Netlify | Function time limit — host the backend with Option B. |
+| First request is very slow | Render's free plan was asleep; wait a minute and retry. |
 
 ---
 

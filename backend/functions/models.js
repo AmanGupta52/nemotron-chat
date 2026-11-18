@@ -1,4 +1,4 @@
-import { getFreeModels, NVIDIA_MODELS } from "./lib/openrouter.js";
+import { getFreeModels, getNvidiaModels } from "./lib/openrouter.js";
 import { withCors } from "./lib/security.js";
 
 const json = (payload, status = 200) =>
@@ -13,6 +13,9 @@ const json = (payload, status = 200) =>
 async function handler(req) {
   if (req.method !== "GET") return json({ error: "Method not allowed. Use GET." }, 405);
 
+  const refresh = new URL(req.url).searchParams.get("refresh") === "1";
+  const nvidiaModels = await getNvidiaModels({ forceRefresh: refresh });
+
   let openrouterModels = [];
   let openrouterError = "";
   try {
@@ -26,7 +29,7 @@ async function handler(req) {
     providers: {
       nvidia: {
         configured: Boolean(process.env.NVIDIA_API_KEY),
-        models: NVIDIA_MODELS,
+        models: nvidiaModels,
       },
       openrouter: {
         configured: Boolean(process.env.OPENROUTER_API_KEY),

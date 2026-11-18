@@ -1,4 +1,4 @@
-import { getFreeModels, NVIDIA_MODELS } from "./lib/openrouter.js";
+import { getFreeModels, getNvidiaModels } from "./lib/openrouter.js";
 import { getDb } from "./lib/db.js";
 import {
   HttpError,
@@ -383,7 +383,7 @@ async function handler(req) {
 
   let modelConfig;
   if (body.provider === "nvidia") {
-    modelConfig = NVIDIA_MODELS.find((model) => model.id === body.model);
+    modelConfig = (await getNvidiaModels()).find((model) => model.id === body.model);
   } else {
     try {
       const freeModels = await getFreeModels();

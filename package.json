@@ -12,9 +12,6 @@
     "start": "npm --prefix backend start",
     "test": "npm --prefix backend test"
   },
-  "dependencies": {
-    "mongodb": "^6.17.0"
-  },
   "engines": {
     "node": ">=18"
   }

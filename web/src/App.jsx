@@ -374,7 +374,8 @@ function Workbench() {
     setChats((cur) => cur.map((c) => (c.id === chatId ? fn(c) : c)));
     setConversationList((cur) => cur.map((c) => {
       if (c.id !== chatId) return c;
-      const { messages: _messages, ...summary } = fn(c);
+      // List entries are summaries without messages, so give fn an empty array to work with.
+      const { messages: _messages, ...summary } = fn({ ...c, messages: c.messages || [] });
       return summary;
     }));
   }, []);
@@ -382,7 +383,7 @@ function Workbench() {
   const patchMessage = useCallback((chatId, messageId, patch) => {
     patchChat(chatId, (chat) => ({
       ...chat,
-      messages: chat.messages.map((m) => (m.id === messageId ? { ...m, ...patch } : m)),
+      messages: (chat.messages || []).map((m) => (m.id === messageId ? { ...m, ...patch } : m)),
     }));
   }, [patchChat]);
 

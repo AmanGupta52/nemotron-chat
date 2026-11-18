@@ -11,7 +11,8 @@
     "test": "node --test"
   },
   "dependencies": {
-    "mongodb": "^6.17.0"
+    "mongodb": "^6.17.0",
+    "nemotron-workbench": "file:.."
   },
   "engines": {
     "node": ">=18"
