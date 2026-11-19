@@ -39,6 +39,12 @@ export function apiFetch(path, { headers = {}, ...init } = {}) {
     credentials: USE_BEARER ? "omit" : "same-origin",
     ...init,
     headers: { ...auth, ...headers },
+  }).then((response) => {
+    // A 401 from any endpoint except the sign-in endpoint itself means the session expired or was revoked.
+    if (response.status === 401 && !path.startsWith(AUTH_API)) {
+      window.dispatchEvent(new Event("workbench-unauthorized"));
+    }
+    return response;
   });
 }
 

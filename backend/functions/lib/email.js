@@ -1,4 +1,22 @@
-export async function sendOtpEmail(email, otp, expiresInMinutes, purpose) {
+const APP_NAME = process.env.APP_NAME || "Nemotron Workbench";
+
+// Text shown in the e-mail. Works with the template in /emailjs/otp-email-template.html.
+function emailCopy(purpose, otp) {
+  if (/reset/i.test(purpose)) {
+    return {
+      subject: `${otp} is your ${APP_NAME} password reset code`,
+      heading: "Reset your password",
+      message: "Use this code to choose a new password. If you did not ask for this, you can safely ignore this email; your password will not change.",
+    };
+  }
+  return {
+    subject: `${otp} is your ${APP_NAME} verification code`,
+    heading: "Verify your email",
+    message: "Use this code to finish setting up your account.",
+  };
+}
+
+export async function sendOtpEmail(email, otp, expiresInMinutes, purpose, extra = {}) {
   const serviceId = process.env.EMAILJS_SERVICE_ID;
   const templateId = process.env.EMAILJS_TEMPLATE_ID;
   const publicKey = process.env.EMAILJS_PUBLIC_KEY;
@@ -24,6 +42,9 @@ export async function sendOtpEmail(email, otp, expiresInMinutes, purpose) {
           otp_code: otp,
           expires_in_minutes: String(expiresInMinutes),
           purpose,
+          app_name: APP_NAME,
+          ...emailCopy(purpose, otp),
+          ...(extra.message ? { message: extra.message } : {}),
         },
       }),
     });
@@ -31,7 +52,7 @@ export async function sendOtpEmail(email, otp, expiresInMinutes, purpose) {
       // EmailJS explains itself in the body (e.g. "API calls are disabled for non-browser applications").
       const detail = (await response.text().catch(() => "")).slice(0, 200);
       console.error("EmailJS rejected the request.", response.status, detail);
-      throw new Error("EmailJS could not deliver the verification email.");
+      throw new Error(`EmailJS could not deliver the email (HTTP ${response.status}).`);
     }
   } catch (error) {
     if (error?.name === "AbortError") throw new Error("EmailJS delivery timed out.");

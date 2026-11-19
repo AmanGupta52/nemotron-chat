@@ -12,7 +12,7 @@ function challengeId(userId, purpose) {
   return `${purpose}:${userId.toString()}`;
 }
 
-export async function issueOtp(user, purpose) {
+export async function issueOtp(user, purpose, options = {}) {
   const collection = (await getDb()).collection("challenges");
   const id = challengeId(user._id, purpose);
 
@@ -69,7 +69,7 @@ export async function issueOtp(user, purpose) {
     }
 
     const purposeText = purpose === "email-verification" ? "verify your email" : "reset your password";
-    await sendOtpEmail(user.email, otp, OTP_EXPIRY_MS / 60_000, purposeText);
+    await sendOtpEmail(user.email, otp, OTP_EXPIRY_MS / 60_000, purposeText, { message: options.message });
     return;
   }
   throw new HttpError(429, "A code request is already being processed. Please try again.");

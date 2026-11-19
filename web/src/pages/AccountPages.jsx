@@ -129,7 +129,7 @@ export function VerifyEmailPage() {
   const { setAuthenticatedUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [email, setEmail] = useState(() => location.state?.email || sessionStorage.getItem("verificationEmail") || "");
+  const [email] = useState(() => location.state?.email || sessionStorage.getItem("verificationEmail") || "");
   const [code, setCode] = useState("");
   const [remaining, setRemaining] = useState(() => {
     const sentAt = Number(sessionStorage.getItem("verificationSentAt"));
@@ -231,7 +231,7 @@ export function ForgotPasswordPage() {
     <PageFrame eyebrow="Account recovery">
       <div className="account-icon"><KeyRound size={23} /></div>
       <h1>Forgot password?</h1>
-      <p className="account-subtitle">If a verified account exists, we’ll send a time-limited reset code.</p>
+      <p className="account-subtitle">We’ll email a time-limited code if an account exists for this address. Check your spam folder too.</p>
       <form className="account-form" onSubmit={submit}>
         <FormField label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" />
         <FormError>{error}</FormError>
@@ -248,6 +248,7 @@ export function ResetPasswordPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [email] = useState(() => location.state?.email || sessionStorage.getItem("resetEmail") || "");
+  const notice = location.state?.message || "";
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -284,6 +285,7 @@ export function ResetPasswordPage() {
         <FormField label="New password (at least 12 characters)" type="password" value={password} onChange={setPassword} autoComplete="new-password" minLength={12} maxLength={128} />
         <FormField label="Confirm new password" type="password" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" minLength={12} maxLength={128} />
         <FormError>{error}</FormError>
+        <FormError success>{notice}</FormError>
         <button className="btn primary account-submit" type="submit" disabled={busy}>{busy ? "Updating…" : "Reset password"}</button>
       </form>
       <p className="account-bottom"><Link to="/forgot-password">Request another code</Link></p>
@@ -318,25 +320,41 @@ export function ProfilePage() {
 
   return (
     <main className="account-page account-page-wide">
-      <section className="account-card account-card-wide">
+      <div className="bento-page">
         <Link className="account-back" to="/chat"><ArrowLeft size={15} /> Back to chat</Link>
-        <p className="account-eyebrow">Your account</p>
-        <h1>Profile</h1>
-        <div className="profile-header">
-          <div className="profile-avatar" aria-label="Profile picture">{user.avatar ? <img src={user.avatar} alt="" /> : initials}</div>
-          <div><strong>{user.name}</strong><span>@{user.username}</span></div>
+        <div className="bento-page-head">
+          <p className="account-eyebrow">Your account</p>
+          <h1>Profile</h1>
         </div>
-        <form className="account-form" onSubmit={save}>
-          <FormField label="Full name" value={name} onChange={setName} autoComplete="name" maxLength={100} />
-          <FormField label="Username" value={username} onChange={setUsername} autoComplete="username" minLength={3} maxLength={32} />
-          <FormField label="Email" value={user.email} onChange={() => {}} readOnly />
-          <div className="profile-verify"><ShieldCheck size={16} /> Email verified</div>
-          <FormError>{error}</FormError>
-          <FormError success>{notice}</FormError>
-          <button className="btn primary account-submit" type="submit" disabled={busy}>{busy ? "Saving…" : "Save profile"}</button>
-        </form>
-        <div className="profile-dates"><span>Account created {new Date(user.createdAt).toLocaleDateString()}</span><span>Last login {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : "—"}</span></div>
-      </section>
+        <div className="bento">
+          <section className="tile tile-wide">
+            <div className="profile-header">
+              <div className="profile-avatar" aria-label="Profile picture">{user.avatar ? <img src={user.avatar} alt="" /> : initials}</div>
+              <div><strong>{user.name}</strong><span>@{user.username}</span></div>
+            </div>
+            <div className="profile-verify"><ShieldCheck size={16} /> Email verified · {user.email}</div>
+          </section>
+          <section className="tile">
+            <p className="tile-label">Member since</p>
+            <p className="tile-title tile-title-lg">{new Date(user.createdAt).toLocaleDateString()}</p>
+          </section>
+          <section className="tile tile-accent">
+            <p className="tile-label">Last login</p>
+            <p className="tile-title">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : "—"}</p>
+          </section>
+          <section className="tile tile-full">
+            <h2><UserRound size={17} /> Edit profile</h2>
+            <form className="account-form" onSubmit={save}>
+              <FormField label="Full name" value={name} onChange={setName} autoComplete="name" maxLength={100} />
+              <FormField label="Username" value={username} onChange={setUsername} autoComplete="username" minLength={3} maxLength={32} />
+              <FormField label="Email" value={user.email} onChange={() => {}} readOnly />
+              <FormError>{error}</FormError>
+              <FormError success>{notice}</FormError>
+              <button className="btn primary account-submit" type="submit" disabled={busy}>{busy ? "Saving…" : "Save profile"}</button>
+            </form>
+          </section>
+        </div>
+      </div>
     </main>
   );
 }
@@ -418,51 +436,60 @@ export function SettingsPage() {
 
   return (
     <main className="account-page account-page-wide">
-      <section className="account-card account-card-wide">
+      <div className="bento-page">
         <Link className="account-back" to="/chat"><ArrowLeft size={15} /> Back to chat</Link>
-        <p className="account-eyebrow">Personalize your workspace</p>
-        <h1>Settings</h1>
+        <div className="bento-page-head">
+          <p className="account-eyebrow">Personalize your workspace</p>
+          <h1>Settings</h1>
+        </div>
         <FormError>{error}</FormError>
         <FormError success>{notice}</FormError>
 
-        <section className="settings-section">
-          <h2><UserRound size={17} /> Account</h2>
-          <p>{user.name} · @{user.username}<br /><span>{user.email} · Email verified</span></p>
-          <Link className="btn ghost" to="/profile">Edit profile</Link>
-        </section>
+        <div className="bento">
+          <section className="tile tile-wide">
+            <h2><UserRound size={17} /> Account</h2>
+            <p>{user.name} · @{user.username}<br />{user.email} · Email verified</p>
+            <Link className="btn ghost" to="/profile">Edit profile</Link>
+          </section>
 
-        <section className="settings-section">
-          <h2><Sparkles size={17} /> Preferences</h2>
-          <label className="account-field"><span>Appearance</span>
-            <select value={theme} onChange={(event) => setTheme(event.target.value)}>
-              <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
-            </select>
-          </label>
-          <button className="btn primary" type="button" onClick={saveTheme}>Save preference</button>
-        </section>
+          <section className="tile tile-wide">
+            <h2><Sparkles size={17} /> Appearance</h2>
+            <label className="account-field"><span>Theme</span>
+              <select value={theme} onChange={(event) => setTheme(event.target.value)}>
+                <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
+              </select>
+            </label>
+            <button className="btn primary" type="button" onClick={saveTheme}>Save preference</button>
+          </section>
 
-        <section className="settings-section">
-          <h2><KeyRound size={17} /> Security</h2>
-          <p>Session cookie: HttpOnly, SameSite, 30-day expiry. Password changes sign out other sessions.</p>
-          <form className="account-form" onSubmit={changePassword}>
-            <FormField label="Current password" type="password" value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" />
-            <FormField label="New password (at least 12 characters)" type="password" value={newPassword} onChange={setNewPassword} autoComplete="new-password" minLength={12} maxLength={128} />
-            <FormField label="Confirm new password" type="password" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" minLength={12} maxLength={128} />
-            <button className="btn primary" type="submit" disabled={busy}>{busy ? "Updating…" : "Change password"}</button>
-          </form>
-        </section>
+          <section className="tile tile-wide tile-tall">
+            <h2><KeyRound size={17} /> Security</h2>
+            <p>Password changes sign out your other sessions.</p>
+            <form className="account-form" onSubmit={changePassword}>
+              <FormField label="Current password" type="password" value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" />
+              <FormField label="New password (at least 12 characters)" type="password" value={newPassword} onChange={setNewPassword} autoComplete="new-password" minLength={12} maxLength={128} />
+              <FormField label="Confirm new password" type="password" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" minLength={12} maxLength={128} />
+              <button className="btn primary" type="submit" disabled={busy}>{busy ? "Updating…" : "Change password"}</button>
+            </form>
+          </section>
 
-        <section className="settings-section danger-zone">
-          <h2>Danger zone</h2>
-          <p>Deleting your account permanently removes its conversations and sessions.</p>
-          <button className="btn ghost danger-button" type="button" onClick={signOut}>Log out</button>
-          <form className="account-form" onSubmit={deleteAccount}>
-            <FormField label="Password to confirm deletion" type="password" value={deletePassword} onChange={setDeletePassword} autoComplete="current-password" />
-            <FormField label='Type "DELETE" to confirm' value={deleteConfirmation} onChange={setDeleteConfirmation} autoComplete="off" />
-            <button className="btn danger-button" type="submit" disabled={busy || deleteConfirmation !== "DELETE"}>{busy ? "Deleting…" : "Delete account and chats"}</button>
-          </form>
-        </section>
-      </section>
+          <section className="tile tile-wide">
+            <h2>Session</h2>
+            <p>Sign out of this device.</p>
+            <button className="btn ghost" type="button" onClick={signOut}>Log out</button>
+          </section>
+
+          <section className="tile tile-wide danger-zone">
+            <h2>Danger zone</h2>
+            <p>Deleting your account permanently removes its conversations and sessions.</p>
+            <form className="account-form" onSubmit={deleteAccount}>
+              <FormField label="Password to confirm deletion" type="password" value={deletePassword} onChange={setDeletePassword} autoComplete="current-password" />
+              <FormField label='Type "DELETE" to confirm' value={deleteConfirmation} onChange={setDeleteConfirmation} autoComplete="off" />
+              <button className="btn danger-button" type="submit" disabled={busy || deleteConfirmation !== "DELETE"}>{busy ? "Deleting…" : "Delete account and chats"}</button>
+            </form>
+          </section>
+        </div>
+      </div>
     </main>
   );
 }

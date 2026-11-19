@@ -11,6 +11,25 @@ import { conversationOwnerFilter, conversationTitle, messageOwnerFilter } from "
 import { splitThink } from "./lib/think.js";
 import { randomUUID } from "node:crypto";
 
+// Protects your provider keys from a runaway client or a signed-in user spamming the endpoint.
+const CHAT_LIMIT = 60;
+const CHAT_WINDOW_MS = 10 * 60 * 1000;
+
+async function enforceChatLimit(db, userId) {
+  const windowStart = Math.floor(Date.now() / CHAT_WINDOW_MS);
+  const key = `chat:${userId}:${windowStart}`;
+  try {
+    await db.collection("authRateLimits").updateOne(
+      { _id: key, count: { $lt: CHAT_LIMIT } },
+      { $inc: { count: 1 }, $setOnInsert: { expiresAt: new Date((windowStart + 2) * CHAT_WINDOW_MS) } },
+      { upsert: true },
+    );
+  } catch (error) {
+    if (error?.code === 11000) throw new HttpError(429, "You are sending messages too quickly. Please wait a few minutes.");
+    throw error;
+  }
+}
+
 const ENDPOINTS = {
   nvidia: "https://integrate.api.nvidia.com/v1/chat/completions",
   openrouter: "https://openrouter.ai/api/v1/chat/completions",
@@ -66,7 +85,7 @@ function errorText(payload, fallback) {
 
 function apiError(error) {
   if (error instanceof HttpError) return json({ error: error.message, ...error.extra }, error.status);
-  console.error("Chat request failed.", error?.name || "Error");
+  console.error("Chat request failed.", error?.name || "Error", String(error?.message || "").slice(0, 300));
   return json({ error: "The chat service is temporarily unavailable." }, 500);
 }
 
@@ -434,6 +453,7 @@ async function handler(req) {
   let db;
   try {
     db = await getDb();
+    await enforceChatLimit(db, auth.user._id);
     if (persistUser) {
       await saveUserMessage(db, auth.user, conversationId, userMessageId, userMessage, body.provider, modelConfig);
     } else {
@@ -454,7 +474,7 @@ async function handler(req) {
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 90_000);
+  const timeoutId = setTimeout(() => controller.abort(), 180_000);
   const abortOnDisconnect = () => controller.abort();
   req.signal?.addEventListener("abort", abortOnDisconnect, { once: true });
 
@@ -557,7 +577,7 @@ async function handler(req) {
     const timedOut = error?.name === "AbortError";
     return json({
       error: timedOut ? "The AI request timed out. Please try again." : "Could not connect to the selected provider.",
-      detail: timedOut ? "The request exceeded 90 seconds." : (error?.message || "Network error"),
+      detail: timedOut ? "The request exceeded 180 seconds." : (error?.message || "Network error"),
     }, 502);
   }
 }

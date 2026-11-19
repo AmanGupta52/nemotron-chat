@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Menu, Monitor, Moon, PanelLeftOpen, Plus, Sparkles, Sun, X } from "lucide-react";
+import { ArrowDown, Menu, Monitor, Moon, PanelLeftOpen, Plus, Sun, X } from "lucide-react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import Composer from "./components/Composer.jsx";
 import Message from "./components/Message.jsx";
+import BentoWelcome from "./components/BentoWelcome.jsx";
 import ModelPicker from "./components/ModelPicker.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import {
@@ -27,12 +28,6 @@ const DEFAULT_MODELS = {
   nvidia: "nvidia/nemotron-3.5-lightning-30b-a3b",
   openrouter: "nvidia/nemotron-3.5-lightning:free",
 };
-const STARTERS = [
-  "Explain a difficult topic in simple words",
-  "Help me write and debug code",
-  "Give me ideas for my next project",
-  "Teach me something new today",
-];
 const EMPTY_PROVIDERS = {
   nvidia: { models: [], configured: null, error: "" },
   openrouter: { models: [], configured: null, error: "" },
@@ -805,28 +800,19 @@ function Workbench() {
             {chatLoading && activeId ? (
               <div className="welcome"><div className="typing" aria-label="Loading conversation"><i /><i /><i /></div><p className="sub">Loading your conversation…</p></div>
             ) : messages.length === 0 ? (
-              <div className="welcome">
-                <div className="welcome-mark"><Sparkles size={24} /></div>
-                <p className="eyebrow">Your AI workspace</p>
-                <h1>One chat.<br /><span>Many minds.</span></h1>
-                <p className="sub">Chat with NVIDIA models or free OpenRouter models for coding, reasoning and vision.</p>
-                {providerError && (
-                  <div className="inline-note error" role="alert">
-                    <span>{providerError}</span>
-                    <button type="button" onClick={() => loadModels(true)}>Retry</button>
-                  </div>
-                )}
-                {keyMissing && !providerError && (
-                  <div className="inline-note warn" role="status">Add <code>{keyName}</code> to the backend's <code>.env</code> file or your hosting environment variables to chat with this provider.</div>
-                )}
-                <div className="starters">
-                  {STARTERS.map((prompt) => (
-                    <button key={prompt} type="button" className="starter" onClick={() => send(prompt)} disabled={!selectedModel || keyMissing || busy}>
-                      <span>{prompt}</span><ArrowUp size={15} />
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <BentoWelcome
+                providerError={providerError}
+                onRetry={() => loadModels(true)}
+                keyMissing={keyMissing}
+                keyName={keyName}
+                onPick={send}
+                disabled={!selectedModel || keyMissing || busy}
+                modelName={selectedModel?.name}
+                providerName={selection.provider === "nvidia" ? "NVIDIA" : "OpenRouter"}
+                vision={Boolean(selectedModel?.vision)}
+                modelCount={activeProvider.models.length}
+                chatCount={chats.length}
+              />
             ) : (
               <div className="thread" role="log" aria-busy={busy}>
                 {messagePage.hasMore && (

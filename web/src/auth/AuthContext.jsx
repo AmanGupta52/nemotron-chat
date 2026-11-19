@@ -26,6 +26,13 @@ export function AuthProvider({ children }) {
 
   useEffect(() => { refresh().catch(() => setUser(null)); }, [refresh]);
 
+  // Any API call that comes back 401 (session expired or revoked) signs the user out locally.
+  useEffect(() => {
+    const onUnauthorized = () => { tokenStore.clear(); setUser(null); };
+    window.addEventListener("workbench-unauthorized", onUnauthorized);
+    return () => window.removeEventListener("workbench-unauthorized", onUnauthorized);
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await apiRequest(AUTH_API, { method: "POST", body: { action: "logout" } });

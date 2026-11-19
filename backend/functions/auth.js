@@ -225,16 +225,27 @@ async function forgotPassword(req, body) {
   const email = normalizeEmail(body.email);
   const db = await getDb();
   await enforceRateLimit(db, "forgot-password", req, 8, HOUR_MS);
-  const user = await db.collection("users").findOne({ email, emailVerified: true });
-  if (user) {
+  const user = await db.collection("users").findOne({ email, status: { $ne: "deleting" } });
+  if (!user) {
+    // The response is identical either way, so this cannot be used to discover accounts. Logged for debugging.
+    console.info("forgot-password: no account matches the submitted address.");
+  } else {
     try {
-      await issueOtp(user, passwordResetPurpose);
+      if (user.emailVerified) {
+        await issueOtp(user, passwordResetPurpose);
+      } else {
+        // The account was never verified, so a reset is impossible. Send a verification code instead of nothing.
+        await issueOtp(user, emailVerificationPurpose, {
+          message: "Your email address has not been verified yet, so your password cannot be reset. Sign in with your password to open the verification screen, then enter this code.",
+        });
+      }
     } catch (error) {
       if (error instanceof HttpError) throw error;
+      console.error("forgot-password: sending the code failed.", error?.message);
       throw new HttpError(502, "The reset email could not be sent. Please try again later.");
     }
   }
-  return json({ message: "If a verified account exists for that email, a reset code has been sent." });
+  return json({ message: "If an account exists for that email, a code has been sent. Check your spam folder too." });
 }
 
 async function resetPassword(req, body) {
