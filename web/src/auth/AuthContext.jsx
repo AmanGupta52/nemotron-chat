@@ -6,23 +6,36 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [connectionError, setConnectionError] = useState(false);
 
   const refresh = useCallback(async () => {
+    // A sleeping free-tier server can need ~50 s to wake up, so allow a generous timeout.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 70_000);
     try {
-      const data = await apiRequest(AUTH_API);
+      const data = await apiRequest(AUTH_API, { signal: controller.signal });
+      setConnectionError(false);
       setUser(data.user || null);
       return data.user || null;
     } catch (error) {
       if (error.status === 401) {
         tokenStore.clear();
+        setConnectionError(false);
         setUser(null);
         return null;
       }
+      setConnectionError(true);
       throw error;
     } finally {
+      clearTimeout(timer);
       setLoading(false);
     }
   }, []);
+
+  const retry = useCallback(() => {
+    setLoading(true);
+    refresh().catch(() => setUser(null));
+  }, [refresh]);
 
   useEffect(() => { refresh().catch(() => setUser(null)); }, [refresh]);
 
@@ -50,10 +63,12 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     user,
     loading,
+    connectionError,
+    retry,
     refresh,
     setAuthenticatedUser,
     logout,
-  }), [user, loading, refresh, setAuthenticatedUser, logout]);
+  }), [user, loading, connectionError, retry, refresh, setAuthenticatedUser, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

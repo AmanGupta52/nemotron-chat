@@ -3,6 +3,7 @@ import { ArrowDown, Menu, Monitor, Moon, PanelLeftOpen, Plus, Sun, X } from "luc
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import Composer from "./components/Composer.jsx";
 import Message from "./components/Message.jsx";
+import Splash from "./components/Splash.jsx";
 import BentoWelcome from "./components/BentoWelcome.jsx";
 import ModelPicker from "./components/ModelPicker.jsx";
 import Sidebar from "./components/Sidebar.jsx";
@@ -870,18 +871,20 @@ function Workbench() {
 }
 
 function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, connectionError, retry } = useAuth();
   const location = useLocation();
-  if (loading) return <main className="route-loading">Checking your session…</main>;
+  if (loading) return <Splash />;
+  if (!user && connectionError) return <Splash error onRetry={retry} />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return children;
 }
 
 export default function App() {
-  const { user, loading } = useAuth();
-  const home = loading
-    ? <main className="route-loading">Checking your session…</main>
-    : <Navigate to={user ? "/chat" : "/login"} replace />;
+  const { user, loading, connectionError, retry } = useAuth();
+  let home;
+  if (loading) home = <Splash />;
+  else if (!user && connectionError) home = <Splash error onRetry={retry} />;
+  else home = <Navigate to={user ? "/chat" : "/login"} replace />;
 
   return (
     <Routes>
