@@ -115,8 +115,8 @@ export function RegisterPage() {
         <FormField label="Full name" value={form.name} onChange={set("name")} autoComplete="name" maxLength={100} />
         <FormField label="Username" value={form.username} onChange={set("username")} autoComplete="username" minLength={3} maxLength={32} />
         <FormField label="Email" type="email" value={form.email} onChange={set("email")} autoComplete="email" />
-        <FormField label="Password (at least 12 characters)" type="password" value={form.password} onChange={set("password")} autoComplete="new-password" minLength={12} maxLength={128} />
-        <FormField label="Confirm password" type="password" value={form.confirmPassword} onChange={set("confirmPassword")} autoComplete="new-password" minLength={12} maxLength={128} />
+        <FormField label="Password (at least 8 characters)" type="password" value={form.password} onChange={set("password")} autoComplete="new-password" minLength={8} maxLength={128} />
+        <FormField label="Confirm password" type="password" value={form.confirmPassword} onChange={set("confirmPassword")} autoComplete="new-password" minLength={8} maxLength={128} />
         <FormError>{error}</FormError>
         <button className="btn primary account-submit" type="submit" disabled={busy}>{busy ? "Creating account…" : "Create account"}</button>
       </form>
@@ -282,8 +282,8 @@ export function ResetPasswordPage() {
       <p className="account-subtitle">Enter the code sent to <strong>{email}</strong> and choose a new password.</p>
       <form className="account-form" onSubmit={submit}>
         <FormField label="6-digit reset code" value={code} onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" maxLength={6} minLength={6} autoComplete="one-time-code" />
-        <FormField label="New password (at least 12 characters)" type="password" value={password} onChange={setPassword} autoComplete="new-password" minLength={12} maxLength={128} />
-        <FormField label="Confirm new password" type="password" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" minLength={12} maxLength={128} />
+        <FormField label="New password (at least 8 characters)" type="password" value={password} onChange={setPassword} autoComplete="new-password" minLength={8} maxLength={128} />
+        <FormField label="Confirm new password" type="password" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" minLength={8} maxLength={128} />
         <FormError>{error}</FormError>
         <FormError success>{notice}</FormError>
         <button className="btn primary account-submit" type="submit" disabled={busy}>{busy ? "Updating…" : "Reset password"}</button>
@@ -467,8 +467,8 @@ export function SettingsPage() {
             <p>Password changes sign out your other sessions.</p>
             <form className="account-form" onSubmit={changePassword}>
               <FormField label="Current password" type="password" value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" />
-              <FormField label="New password (at least 12 characters)" type="password" value={newPassword} onChange={setNewPassword} autoComplete="new-password" minLength={12} maxLength={128} />
-              <FormField label="Confirm new password" type="password" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" minLength={12} maxLength={128} />
+              <FormField label="New password (at least 8 characters)" type="password" value={newPassword} onChange={setNewPassword} autoComplete="new-password" minLength={8} maxLength={128} />
+              <FormField label="Confirm new password" type="password" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" minLength={8} maxLength={128} />
               <button className="btn primary" type="submit" disabled={busy}>{busy ? "Updating…" : "Change password"}</button>
             </form>
           </section>

@@ -147,9 +147,12 @@ export async function verifyPassword(password, encoded) {
 
 export const DUMMY_PASSWORD_HASH = `scrypt$16384$8$1$${"0".repeat(32)}$${"0".repeat(128)}`;
 
+export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PASSWORD_LENGTH = 128;
+
 export function validatePassword(password) {
-  if (typeof password !== "string" || password.length < 12 || password.length > 128) {
-    throw new HttpError(400, "Password must be between 12 and 128 characters.");
+  if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+    throw new HttpError(400, `Password must be between ${MIN_PASSWORD_LENGTH} and ${MAX_PASSWORD_LENGTH} characters.`);
   }
 }
 

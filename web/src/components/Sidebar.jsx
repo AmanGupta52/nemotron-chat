@@ -32,6 +32,7 @@ export default function Sidebar({
   chats, activeId, busyChatId, historyError, open, collapsed, onClose, onCollapse,
   onNew, onOpen, onRename, onPin, onDelete, onExport, onClearAll,
   user, onLogout, onSearch, onImport, localImportCount, historyLoading,
+  hasMore, loadingMore, onLoadMore,
 }) {
   const [query, setQuery] = useState("");
   const [ui, setUi] = useState({ menuId: null, up: false, confirm: false, renamingId: null });
@@ -145,13 +146,18 @@ export default function Sidebar({
               </ul>
             </section>
           ))}
+          {hasMore && (
+            <button type="button" className="sb-more" onClick={onLoadMore} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : "Load more chats"}
+            </button>
+          )}
           {!groups.length && (
             <p className="sb-empty">{historyLoading ? "Loading your conversations…" : query ? "No conversations match your search." : "Your conversations will appear here."}</p>
           )}
         </nav>
 
         <div className="sb-foot">
-          <span>{chats.length} shown · private to your account</span>
+          <span>{chats.length} shown{hasMore ? " · more available" : ""} · private to your account</span>
           {chats.length > 0 && (
             <button type="button" className={`link-btn ${confirmAll ? "danger" : ""}`} onClick={() => { if (!confirmAll) { setConfirmAll(true); return; } setConfirmAll(false); onClearAll(); }}>
               {confirmAll ? "Click again to confirm" : "Clear all"}

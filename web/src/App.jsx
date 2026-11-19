@@ -44,6 +44,8 @@ function timestamp(value) {
   return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
+const LIST_PAGE_SIZE = 4; // conversations fetched per page; "Load more" fetches the next 4
+
 function mapConversation(raw) {
   return {
     ...raw,
@@ -184,6 +186,11 @@ function Workbench() {
   const dragDepth = useRef(0);
   const firstListLoadRef = useRef(true);
   const listRequestRef = useRef(0);
+  const lastQueryRef = useRef("");
+  const lastRefreshAtRef = useRef(0);
+  const listLengthRef = useRef(0);
+  const [hasMoreChats, setHasMoreChats] = useState(false);
+  const [loadingMoreChats, setLoadingMoreChats] = useState(false);
   const conversationRequestRef = useRef(0);
 
   const activeChat = useMemo(() => chats.find((c) => c.id === activeId) || null, [chats, activeId]);
@@ -234,13 +241,23 @@ function Workbench() {
     }
   }, [navigate]);
 
-  const loadConversationList = useCallback(async (query = "") => {
+  const loadConversationList = useCallback(async (query = "", { append = false } = {}) => {
     const requestId = ++listRequestRef.current;
-    setHistoryLoading(true);
+    if (append) setLoadingMoreChats(true);
+    else { setHistoryLoading(true); lastQueryRef.current = query; }
     try {
-      const data = await apiRequest(`${CONVERSATIONS_API}?q=${encodeURIComponent(query)}`);
+      const skip = append ? listLengthRef.current : 0;
+      const data = await apiRequest(`${CONVERSATIONS_API}?q=${encodeURIComponent(query)}&limit=${LIST_PAGE_SIZE}&skip=${skip}`);
       if (requestId !== listRequestRef.current) return;
       const list = (data.conversations || []).map(mapConversation);
+      setHasMoreChats(Boolean(data.hasMore));
+      if (append) {
+        setConversationList((current) => [...current, ...list.filter((item) => !current.some((chat) => chat.id === item.id))]);
+        setChats((current) => [...current, ...list.filter((item) => !current.some((chat) => chat.id === item.id))]);
+        setHistoryError("");
+        return;
+      }
+      lastRefreshAtRef.current = Date.now();
       setConversationList(list);
       setChats((current) => {
         const details = new Map(current.filter((chat) => chat.loaded).map((chat) => [chat.id, chat]));
@@ -253,11 +270,11 @@ function Workbench() {
       setHistoryError("");
       if (firstListLoadRef.current) {
         firstListLoadRef.current = false;
-        const savedId = readActiveId();
-        const selected = list.find((chat) => chat.id === savedId || chat.sourceId === savedId);
-        if (selected) {
-          setActiveId(selected.id);
-          loadConversation(selected.id);
+        // Reopen the most recently used conversation (also one started on another device), newest messages only.
+        const newest = [...list].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+        if (newest) {
+          setActiveId(newest.id);
+          loadConversation(newest.id);
         } else {
           setActiveId(null);
         }
@@ -266,9 +283,11 @@ function Workbench() {
       if (error.status === 401) navigate("/login", { replace: true });
       else setHistoryError(error.message || "Could not load your conversations.");
     } finally {
-      if (requestId === listRequestRef.current) setHistoryLoading(false);
+      if (requestId === listRequestRef.current) { setHistoryLoading(false); setLoadingMoreChats(false); }
     }
   }, [loadConversation, navigate]);
+
+  const loadMoreChats = useCallback(() => loadConversationList(lastQueryRef.current, { append: true }), [loadConversationList]);
 
   useEffect(() => { loadConversationList(""); }, [loadConversationList]);
 
@@ -327,6 +346,23 @@ function Workbench() {
   }, [selection]);
 
   useEffect(() => { writeActiveId(activeId); }, [activeId]);
+  useEffect(() => { listLengthRef.current = conversationList.length; }, [conversationList.length]);
+
+  // Coming back to the app/tab: pull in chats made on other devices (at most every 30 s, never mid-reply).
+  const activeIdRef = useRef(activeId);
+  const replyingRef = useRef(false);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+  useEffect(() => { replyingRef.current = busy; }, [busy]);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible" || replyingRef.current) return;
+      if (Date.now() - lastRefreshAtRef.current < 30_000) return;
+      loadConversationList(lastQueryRef.current);
+      if (activeIdRef.current) loadConversation(activeIdRef.current);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [loadConversationList, loadConversation]);
   useEffect(() => {
     if (user?.preferences?.theme) setTheme(user.preferences.theme);
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -775,6 +811,9 @@ function Workbench() {
         onImport={importLocalChats}
         localImportCount={localChats.length}
         historyLoading={historyLoading}
+        hasMore={hasMoreChats}
+        loadingMore={loadingMoreChats}
+        onLoadMore={loadMoreChats}
       />
 
       <main className="main" onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>

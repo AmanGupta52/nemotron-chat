@@ -179,10 +179,14 @@ async function handler(req) {
           const ids = await searchConversationIds(db, user._id, search);
           filter._id = { $in: ids };
         }
+        // Paged so a client can load just the first few chats and ask for more later.
+        const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 100));
+        const skip = Math.min(5000, Math.max(0, Number(url.searchParams.get("skip")) || 0));
         const docs = await conversations.find(filter, { projection: { userId: 0 } })
-          .sort({ pinned: -1, updatedAt: -1 }).limit(100).toArray();
+          .sort({ pinned: -1, updatedAt: -1, _id: -1 }).skip(skip).limit(limit + 1).toArray();
         return json({
-          conversations: docs.map(({ _id, ...conversation }) => ({ id: _id, ...conversation })),
+          conversations: docs.slice(0, limit).map(({ _id, ...conversation }) => ({ id: _id, ...conversation })),
+          hasMore: docs.length > limit,
         });
       }
 
