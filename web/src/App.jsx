@@ -150,6 +150,15 @@ function Workbench() {
   const { user, logout, refresh, offline, setOffline } = useAuth();
   const offlineRef = useRef(false);
   useEffect(() => { offlineRef.current = offline; }, [offline]);
+
+  // The offline notice is shown briefly (4 s), not permanently; the message box stays locked while offline.
+  const [offlineNotice, setOfflineNotice] = useState(false);
+  useEffect(() => {
+    if (!offline) { setOfflineNotice(false); return undefined; }
+    setOfflineNotice(true);
+    const timer = setTimeout(() => setOfflineNotice(false), 4000);
+    return () => clearTimeout(timer);
+  }, [offline]);
   const navigate = useNavigate();
   const [initial] = useState(() => {
     const saved = readSavedSelection();
@@ -897,7 +906,7 @@ function Workbench() {
           <button type="button" className="icon-btn" onClick={changeTheme} aria-label={`Theme: ${theme}. Click to change`} title={`Theme: ${theme}`}><ThemeIcon size={18} /></button>
           <button type="button" className="icon-btn" onClick={newChat} aria-label="New chat" title="New chat"><Plus size={20} /></button>
         </header>
-        {offline && (
+        {offline && offlineNotice && (
           <div className="offline-banner" role="status">
             <span>You&rsquo;re offline. Showing the chats saved on this device.</span>
             <button type="button" onClick={reconnect}>Reconnect</button>
