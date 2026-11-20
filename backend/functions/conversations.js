@@ -19,7 +19,7 @@ const MAX_MESSAGE_LENGTH = 16_000;
 
 function errorResponse(error) {
   if (error instanceof HttpError) return json({ error: error.message, ...error.extra }, error.status);
-  console.error("Conversation request failed.", error?.name || "Error");
+  console.error("Conversation request failed.", error?.name || "Error", String(error?.message || "").slice(0, 300));
   return json({ error: "The conversation service is temporarily unavailable." }, 500);
 }
 
@@ -228,7 +228,7 @@ async function handler(req) {
       const id = url.searchParams.get("id");
       if (!id) throw new HttpError(400, "Conversation ID is required.");
       const body = await readJson(req);
-      const updates = { updatedAt: new Date() };
+      const updates = {}; // renaming or pinning must not change a chat's 'last used' time
       if (body.title !== undefined) {
         if (typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 120) {
           throw new HttpError(400, "Conversation title must be between 1 and 120 characters.");
@@ -239,7 +239,7 @@ async function handler(req) {
         if (typeof body.pinned !== "boolean") throw new HttpError(400, "Pinned must be true or false.");
         updates.pinned = body.pinned;
       }
-      if (Object.keys(updates).length === 1) throw new HttpError(400, "No conversation changes were provided.");
+      if (Object.keys(updates).length === 0) throw new HttpError(400, "No conversation changes were provided.");
       const result = await conversations.updateOne(conversationOwnerFilter(user._id, id), { $set: updates });
       if (!result.matchedCount) throw new HttpError(403, "You cannot access this conversation.");
       return json({ message: "Conversation updated." });

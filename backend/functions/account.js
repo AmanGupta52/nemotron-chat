@@ -14,7 +14,7 @@ import { validateProfileName } from "./lib/validation.js";
 
 function errorResponse(error) {
   if (error instanceof HttpError) return json({ error: error.message, ...error.extra }, error.status);
-  console.error("Account request failed.", error?.name || "Error");
+  console.error("Account request failed.", error?.name || "Error", String(error?.message || "").slice(0, 300));
   return json({ error: "The account service is temporarily unavailable." }, 500);
 }
 

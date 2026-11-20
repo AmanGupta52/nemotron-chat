@@ -157,7 +157,7 @@ export default function Sidebar({
         </nav>
 
         <div className="sb-foot">
-          <span>{chats.length} shown{hasMore ? " · more available" : ""} · private to your account</span>
+          <span>{chats.length}{hasMore ? "+" : ""} chats · private</span>
           {chats.length > 0 && (
             <button type="button" className={`link-btn ${confirmAll ? "danger" : ""}`} onClick={() => { if (!confirmAll) { setConfirmAll(true); return; } setConfirmAll(false); onClearAll(); }}>
               {confirmAll ? "Click again to confirm" : "Clear all"}

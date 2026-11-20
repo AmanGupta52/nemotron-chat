@@ -77,7 +77,7 @@ export default function BentoWelcome({
 
         <section className="tile tile-tip">
           <span className="tile-icon"><Keyboard size={18} /></span>
-          <p className="tile-text"><strong>Tip:</strong> press Enter to send and Shift + Enter for a new line. {modelCount ? `${modelCount} models available.` : ""}</p>
+          <p className="tile-text"><strong>Tip:</strong> {modelCount ? `${modelCount} models available. ` : ""}Use the model picker at the top to switch any time.</p>
         </section>
       </div>
     </div>
