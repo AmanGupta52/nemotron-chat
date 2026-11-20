@@ -529,3 +529,15 @@ a.btn:hover { text-decoration: none; }
 }
 .sb-more:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .sb-more:disabled { opacity: 0.6; cursor: progress; }
+
+/* offline banner */
+.offline-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 12px 4px; padding: 9px 14px;
+  border: 1px solid color-mix(in srgb, var(--warn, #d9a441) 45%, var(--line)); border-radius: 14px;
+  background: color-mix(in srgb, var(--warn, #d9a441) 14%, var(--panel)); color: var(--text); font-size: 13px;
+}
+.offline-banner button {
+  flex: none; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-2);
+  color: var(--text); font: 600 12px inherit; cursor: pointer;
+}
+.offline-banner button:hover { border-color: var(--accent); color: var(--accent); }

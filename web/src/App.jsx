@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import Composer from "./components/Composer.jsx";
 import Message from "./components/Message.jsx";
 import Splash from "./components/Splash.jsx";
+import { cacheList, cacheMessages, getCachedList, getCachedMessages } from "./lib/offlineCache.js";
 import BentoWelcome from "./components/BentoWelcome.jsx";
 import ModelPicker from "./components/ModelPicker.jsx";
 import Sidebar from "./components/Sidebar.jsx";
@@ -146,7 +147,9 @@ function useTheme() {
 }
 
 function Workbench() {
-  const { user, logout, refresh } = useAuth();
+  const { user, logout, refresh, offline, setOffline } = useAuth();
+  const offlineRef = useRef(false);
+  useEffect(() => { offlineRef.current = offline; }, [offline]);
   const navigate = useNavigate();
   const [initial] = useState(() => {
     const saved = readSavedSelection();
@@ -227,9 +230,20 @@ function Workbench() {
       )));
       setMessagePage({ hasMore: data.hasMore, nextCursor: data.nextCursor });
       setHistoryError("");
+      setOffline(false);
     } catch (error) {
+      const cached = !append && (!error.status || error.status >= 500) ? getCachedMessages(id) : null;
       if (error.status === 401) {
         navigate("/login", { replace: true });
+      } else if (cached) {
+        // Offline (or the server is asleep): show the copy saved on this device.
+        setChats((current) => {
+          const previous = current.find((chat) => chat.id === id) || { id, title: "Saved chat", createdAt: Date.now(), updatedAt: Date.now() };
+          return [{ ...previous, loaded: true, messages: cached }, ...current.filter((chat) => chat.id !== id)];
+        });
+        setMessagePage({ hasMore: false, nextCursor: null });
+        setOffline(true);
+        setHistoryError("");
       } else {
         setHistoryError(error.message || "Could not load this conversation.");
       }
@@ -239,7 +253,7 @@ function Workbench() {
         setLoadingOlder(false);
       }
     }
-  }, [navigate]);
+  }, [navigate, setOffline]);
 
   const loadConversationList = useCallback(async (query = "", { append = false } = {}) => {
     const requestId = ++listRequestRef.current;
@@ -258,6 +272,8 @@ function Workbench() {
         return;
       }
       lastRefreshAtRef.current = Date.now();
+      setOffline(false);
+      if (!query) cacheList(list);
       setConversationList(list);
       setChats((current) => {
         const details = new Map(current.filter((chat) => chat.loaded).map((chat) => [chat.id, chat]));
@@ -280,16 +296,61 @@ function Workbench() {
         }
       }
     } catch (error) {
+      const unreachable = !error.status || error.status >= 500;
+      const saved = unreachable && !append && !query ? getCachedList() : [];
       if (error.status === 401) navigate("/login", { replace: true });
-      else setHistoryError(error.message || "Could not load your conversations.");
+      else if (saved.length) {
+        // Offline: keep showing what is saved on this device (the list was already shown from the cache).
+        setOffline(true);
+        setHistoryError("");
+        if (firstListLoadRef.current) {
+          firstListLoadRef.current = false;
+          const newest = [...saved].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+          setActiveId(newest.id);
+          loadConversation(newest.id);
+        }
+      } else setHistoryError(error.message || "Could not load your conversations.");
     } finally {
       if (requestId === listRequestRef.current) { setHistoryLoading(false); setLoadingMoreChats(false); }
     }
-  }, [loadConversation, navigate]);
+  }, [loadConversation, navigate, setOffline]);
 
   const loadMoreChats = useCallback(() => loadConversationList(lastQueryRef.current, { append: true }), [loadConversationList]);
 
-  useEffect(() => { loadConversationList(""); }, [loadConversationList]);
+  // Show the saved list immediately (works offline and hides server wake-up time), then refresh from the server.
+  useEffect(() => {
+    const saved = getCachedList();
+    if (saved.length) {
+      setConversationList(saved);
+      setChats(saved);
+      const newest = [...saved].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+      const messages = newest ? getCachedMessages(newest.id) : null;
+      if (newest && messages) {
+        setActiveId(newest.id);
+        setChats(saved.map((chat) => (chat.id === newest.id ? { ...chat, loaded: true, messages } : chat)));
+      }
+    }
+    loadConversationList("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the newest messages of the open chat saved for offline use (not while a reply is streaming).
+  useEffect(() => {
+    if (activeChat?.loaded && !busy) cacheMessages(activeChat.id, activeChat.messages);
+  }, [activeChat, busy]);
+
+  const reconnect = useCallback(() => {
+    refresh().catch(() => {});
+    loadConversationList(lastQueryRef.current);
+    if (activeIdRef.current) loadConversation(activeIdRef.current);
+  }, [refresh, loadConversationList, loadConversation]);
+
+  // Connection restored while the app is open.
+  useEffect(() => {
+    const onOnline = () => { if (offlineRef.current) reconnect(); };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [reconnect]);
 
   // ---------- model catalog ----------
   const loadModels = useCallback(async (refresh = false) => {
@@ -420,6 +481,7 @@ function Workbench() {
   }, [patchChat]);
 
   const runCompletion = useCallback(async (chatId, history, model, provider, saveOptions = {}) => {
+    if (offlineRef.current) { flash("You're offline. Reconnect to send messages."); return; }
     const controller = new AbortController();
     abortRef.current = controller;
     busyRef.current = chatId;
@@ -529,6 +591,7 @@ function Workbench() {
   const send = (override) => {
     const text = (typeof override === "string" ? override : input).trim();
     if ((!text && !pendingImage) || busyRef.current) return;
+    if (offline) { flash("You're offline. Reconnect to send messages."); return; }
     if (!selectedModel) { flash("Choose a model first."); return; }
     if (keyMissing) { flash(`Add ${selection.provider === "nvidia" ? "NVIDIA_API_KEY" : "OPENROUTER_API_KEY"} to use this provider.`); return; }
 
@@ -834,6 +897,12 @@ function Workbench() {
           <button type="button" className="icon-btn" onClick={changeTheme} aria-label={`Theme: ${theme}. Click to change`} title={`Theme: ${theme}`}><ThemeIcon size={18} /></button>
           <button type="button" className="icon-btn" onClick={newChat} aria-label="New chat" title="New chat"><Plus size={20} /></button>
         </header>
+        {offline && (
+          <div className="offline-banner" role="status">
+            <span>You&rsquo;re offline. Showing the chats saved on this device.</span>
+            <button type="button" onClick={reconnect}>Reconnect</button>
+          </div>
+        )}
 
         <div className="thread-wrap">
           <div className="thread-scroll" ref={scrollRef} onScroll={onScroll}>
@@ -896,8 +965,8 @@ function Workbench() {
           onSend={() => send()}
           onStop={stop}
           busy={busy}
-          locked={!selectedModel || keyMissing}
-          placeholder={selectedModel ? `Message ${selectedModel.name}` : "Choose a model to start chatting"}
+          locked={offline || !selectedModel || keyMissing}
+          placeholder={offline ? "You're offline. Reconnect to send messages" : selectedModel ? `Message ${selectedModel.name}` : "Choose a model to start chatting"}
           vision={Boolean(selectedModel?.vision)}
           image={pendingImage}
           onPickFile={pickFile}
