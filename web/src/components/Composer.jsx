@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { ArrowUp, ImagePlus, Square, X } from "lucide-react";
+import { ArrowUp, FileText, Loader2, Paperclip, Square, X } from "lucide-react";
 
 const isTouchDevice = () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
 
@@ -18,7 +18,7 @@ export default function Composer({
     el.style.height = `${Math.min(el.scrollHeight, max)}px`;
   }, [value]);
 
-  const canSend = !busy && !locked && (value.trim() || image);
+  const canSend = !busy && !locked && !image?.uploading && (value.trim() || image);
 
   const onKeyDown = (event) => {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
@@ -29,17 +29,13 @@ export default function Composer({
   };
 
   const onPaste = (event) => {
-    const file = Array.from(event.clipboardData?.files || []).find((f) => f.type.startsWith("image/"));
+    const file = event.clipboardData?.files?.[0];
     if (!file) return;
     event.preventDefault();
     onPickFile(file);
   };
 
   const attach = () => {
-    if (!vision) {
-      onNotice("The selected model can't read images. Pick a model with the Vision badge.");
-      return;
-    }
     fileRef.current?.click();
   };
 
@@ -47,31 +43,35 @@ export default function Composer({
     <div className="composer-wrap">
       {image && (
         <div className="attachment">
-          <img src={image.dataUrl} alt="" />
+          {image.dataUrl
+            ? <img src={image.dataUrl} alt="" />
+            : <span style={{ width: 44, height: 44, display: "grid", placeItems: "center" }}><FileText size={24} /></span>}
           <div className="attachment-text">
             <strong>{image.name}</strong>
-            <small>{Math.max(1, Math.round(image.size / 1024))} KB · ready to send</small>
+            <small>
+              {Math.max(1, Math.round(image.size / 1024))} KB ·{" "}
+              {image.uploading ? <><Loader2 size={12} className="spin" /> uploading…</> : "ready to send"}
+            </small>
           </div>
-          <button type="button" className="icon-btn small" onClick={onRemoveImage} aria-label="Remove image"><X size={15} /></button>
+          <button type="button" className="icon-btn small" onClick={onRemoveImage} aria-label="Remove attachment"><X size={15} /></button>
         </div>
       )}
       <div className="composer">
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
           hidden
           onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onPickFile(f); }}
         />
         <button
           type="button"
-          className={`icon-btn ${vision ? "" : "dim"}`}
+          className="icon-btn"
           onClick={attach}
           disabled={locked}
-          aria-label="Attach image"
-          title={vision ? "Attach an image" : "This model can't read images"}
+          aria-label="Attach file"
+          title={vision ? "Attach an image or file" : "Attach a file (images need a Vision model)"}
         >
-          <ImagePlus size={20} />
+          <Paperclip size={20} />
         </button>
         <textarea
           ref={areaRef}

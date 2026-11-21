@@ -15,6 +15,10 @@ services:
         sync: false
       - key: AUTH_SECRET
         sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        value: nemotron-workbench
       - key: EMAILJS_SERVICE_ID
         sync: false
       - key: EMAILJS_TEMPLATE_ID

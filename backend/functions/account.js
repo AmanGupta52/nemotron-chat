@@ -1,4 +1,5 @@
 import { getDb } from "./lib/db.js";
+import { deleteUserUploads } from "./lib/cloudinary.js";
 import {
   HttpError,
   expiredSessionCookie,
@@ -68,6 +69,7 @@ async function handler(req) {
     await db.collection("challenges").deleteMany({ userId: user._id });
     await db.collection("conversations").deleteMany({ userId: user._id });
     await db.collection("messages").deleteMany({ userId: user._id });
+    await deleteUserUploads(db, user._id);
     await db.collection("users").deleteOne({ _id: user._id });
     return json({ message: "Account and associated private data deleted." }, 200, {
       "Set-Cookie": expiredSessionCookie(req),

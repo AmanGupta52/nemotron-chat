@@ -13,6 +13,7 @@ import {
   safeFilename, titleFromText, writeActiveId,
 } from "./lib/history.js";
 import { prepareImage } from "./lib/image.js";
+import { MAX_UPLOAD_BYTES, dataUrlToBlob, uploadFile } from "./lib/upload.js";
 import { readDelta, readEvents } from "./lib/stream.js";
 import { splitThink } from "./lib/think.js";
 import { useAuth } from "./auth/AuthContext.jsx";
@@ -71,6 +72,7 @@ function mapMessage(raw) {
     ...(metadata.partial ? { partial: true } : {}),
     ...(metadata.truncated ? { truncated: true } : {}),
     ...(metadata.hadImage ? { hadImage: true, imageName: metadata.imageName } : {}),
+    ...(metadata.attachment ? { attachment: metadata.attachment } : {}),
   };
 }
 
@@ -110,21 +112,30 @@ function buildPayload(messages, model) {
     let text = m.role === "assistant" ? splitThink(m.content).answer : (m.content || "").trim();
     text = text.slice(0, 15_900);
     let image = "";
+    const file = m.role === "user" ? m.attachment : null;
     if (m.role === "user" && m.imageDataUrl) {
       if (model.vision && imagesLeft > 0) { image = m.imageDataUrl; imagesLeft -= 1; }
       else text = `${text ? `${text}\n\n` : ""}[An image was attached here, but it is not available to this model.]`;
-    } else if (m.role === "user" && m.hadImage) {
+    } else if (file?.kind === "image") {
+      // Saved image: the server loads it back from Cloudinary (vision models, newest three only).
+      if (model.vision && imagesLeft > 0) imagesLeft -= 1;
+      else text = `${text ? `${text}\n\n` : ""}[An image was attached here, but it is not available to this model.]`;
+    } else if (m.role === "user" && m.hadImage && !file) {
       text = `${text ? `${text}\n\n` : ""}[An image was attached here, but it is no longer available.]`;
     }
-    if (!text && !image) continue;
-    out.push({ role: m.role, content: text, ...(image ? { imageDataUrl: image, imageName: m.imageName } : {}) });
+    if (!text && !image && !file) continue;
+    out.push({
+      role: m.role, content: text,
+      ...(image ? { imageDataUrl: image, imageName: m.imageName } : {}),
+      ...(file ? { attachment: { publicId: file.publicId } } : {}),
+    });
   }
   out.reverse();
   while (out.length && out[0].role !== "user") out.shift();
   const merged = [];
   for (const m of out) {
     const prev = merged[merged.length - 1];
-    if (prev && prev.role === m.role && !prev.imageDataUrl && !m.imageDataUrl) prev.content = `${prev.content}\n\n${m.content}`.slice(0, 15_900);
+    if (prev && prev.role === m.role && !prev.imageDataUrl && !m.imageDataUrl && !prev.attachment && !m.attachment) prev.content = `${prev.content}\n\n${m.content}`.slice(0, 15_900);
     else merged.push({ ...m });
   }
   return merged;
@@ -600,13 +611,15 @@ function Workbench() {
   const send = (override) => {
     const text = (typeof override === "string" ? override : input).trim();
     if ((!text && !pendingImage) || busyRef.current) return;
+    if (pendingImage?.uploading) { flash("Wait for the file to finish uploading.", "info"); return; }
     if (offline) { flash("You're offline. Reconnect to send messages."); return; }
     if (!selectedModel) { flash("Choose a model first."); return; }
     if (keyMissing) { flash(`Add ${selection.provider === "nvidia" ? "NVIDIA_API_KEY" : "OPENROUTER_API_KEY"} to use this provider.`); return; }
 
     const userMessage = {
       id: createId(), role: "user", content: text,
-      ...(pendingImage ? { imageDataUrl: pendingImage.dataUrl, imageName: pendingImage.name } : {}),
+      ...(pendingImage?.isImage ? { imageDataUrl: pendingImage.dataUrl, imageName: pendingImage.name } : {}),
+      ...(pendingImage?.attachment ? { attachment: pendingImage.attachment } : {}),
     };
     let chatId = activeId;
     let history;
@@ -617,7 +630,7 @@ function Workbench() {
       const chat = {
         id: chatId, title: deriveTitle(history), pinned: false, createdAt: now, updatedAt: now,
         provider: selection.provider, modelId: selectedModel.id, modelName: selectedModel.name,
-        preview: text.slice(0, 240) || (pendingImage ? "Image attachment" : ""), loaded: true, messages: history,
+        preview: text.slice(0, 240) || (pendingImage ? (pendingImage.isImage ? "Image attachment" : "File attachment") : ""), loaded: true, messages: history,
       };
       setChats((cur) => [chat, ...cur.filter((item) => item.id !== chatId)]);
       setConversationList((cur) => [chat, ...cur.filter((item) => item.id !== chatId)]);
@@ -809,7 +822,7 @@ function Workbench() {
   const selectModel = (provider, model) => {
     setSelection({ provider, modelId: model.id });
     setBanner(null);
-    if (pendingImage && !model.vision) {
+    if (pendingImage?.isImage && !model.vision) {
       setPendingImage(null);
       flash(`${model.name} can't read images, so the attached image was removed.`, "info");
     }
@@ -817,15 +830,29 @@ function Workbench() {
 
   const pickFile = async (file) => {
     if (!file) return;
-    if (!selectedModel?.vision) {
+    const isImage = String(file.type).startsWith("image/");
+    if (isImage && !selectedModel?.vision) {
       flash("The selected model can't read images. Pick a model with the Vision badge first.", "info");
       return;
     }
+    if (!isImage && file.size > MAX_UPLOAD_BYTES) {
+      flash(`"${file.name}" is larger than ${MAX_UPLOAD_BYTES / 1048576} MB.`);
+      return;
+    }
+    const token = createId();
     try {
-      setPendingImage(await prepareImage(file));
+      // Images are shrunk in the browser first; every other file type is uploaded as it is.
+      const draft = isImage
+        ? { ...(await prepareImage(file)), isImage: true }
+        : { name: file.name || "file", size: file.size, isImage: false };
+      const blob = isImage ? dataUrlToBlob(draft.dataUrl) : file;
+      setPendingImage({ ...draft, token, uploading: true });
       setBanner(null);
+      const attachment = await uploadFile(blob, draft.name);
+      setPendingImage((cur) => (cur?.token === token ? { ...cur, uploading: false, attachment } : cur));
     } catch (error) {
-      flash(error.message || "Could not read that image.");
+      setPendingImage((cur) => (cur?.token === token ? null : cur));
+      flash(error.message || "Could not upload that file.");
     }
   };
 
@@ -841,7 +868,7 @@ function Workbench() {
     event.preventDefault();
     dragDepth.current = 0;
     setDragActive(false);
-    pickFile(Array.from(event.dataTransfer.files).find((f) => f.type.startsWith("image/")));
+    pickFile(event.dataTransfer.files[0]);
   };
 
   const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;

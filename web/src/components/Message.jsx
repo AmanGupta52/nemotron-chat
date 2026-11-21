@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Brain, Check, ChevronRight, Copy, ImageIcon, Pencil, RotateCcw, Sparkles } from "lucide-react";
+import { AlertTriangle, Brain, Check, ChevronRight, Copy, FileText, ImageIcon, Pencil, RotateCcw, Sparkles } from "lucide-react";
 import { splitThink } from "../lib/think.js";
 
 const Markdown = lazy(() => import("./Markdown.jsx"));
@@ -53,7 +53,7 @@ function UserMessage({ message, canEdit, onEdit, onError }) {
 
   const save = () => {
     const next = draft.trim();
-    if (!next && !message.imageDataUrl) return;
+    if (!next && !message.imageDataUrl && !message.attachment) return;
     setEditing(false);
     onEdit(message.id, next);
   };
@@ -62,7 +62,17 @@ function UserMessage({ message, canEdit, onEdit, onError }) {
     <article className="msg user">
       <div className="user-wrap">
         {message.imageDataUrl && <img className="msg-image" src={message.imageDataUrl} alt={message.imageName || "Attached image"} />}
-        {!message.imageDataUrl && message.hadImage && (
+        {!message.imageDataUrl && message.attachment?.kind === "image" && (
+          <a href={message.attachment.url} target="_blank" rel="noopener noreferrer">
+            <img className="msg-image" src={message.attachment.url.replace("/upload/", "/upload/w_800,q_auto,f_auto/")} alt={message.attachment.name || "Attached image"} loading="lazy" />
+          </a>
+        )}
+        {message.attachment && message.attachment.kind !== "image" && (
+          <a className="img-chip" href={message.attachment.url} target="_blank" rel="noopener noreferrer" download={message.attachment.name}>
+            <FileText size={13} /> {message.attachment.name}
+          </a>
+        )}
+        {!message.imageDataUrl && !message.attachment && message.hadImage && (
           <span className="img-chip"><ImageIcon size={13} /> {message.imageName || "Image"} · not saved in history</span>
         )}
         {editing ? (
@@ -82,7 +92,7 @@ function UserMessage({ message, canEdit, onEdit, onError }) {
             />
             <div className="edit-actions">
               <button type="button" className="btn ghost" onClick={() => { setEditing(false); setDraft(message.content); }}>Cancel</button>
-              <button type="button" className="btn primary" onClick={save} disabled={!draft.trim() && !message.imageDataUrl}>Save &amp; resend</button>
+              <button type="button" className="btn primary" onClick={save} disabled={!draft.trim() && !message.imageDataUrl && !message.attachment}>Save &amp; resend</button>
             </div>
           </div>
         ) : (

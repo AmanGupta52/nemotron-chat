@@ -59,6 +59,7 @@ function cleanMessage(raw) {
     message.content = content;
     if (hadImage) message.hadImage = true;
     if (typeof raw.imageName === "string") message.imageName = raw.imageName;
+    if (raw.attachment && typeof raw.attachment.url === "string" && typeof raw.attachment.publicId === "string") message.attachment = raw.attachment;
   } else {
     if (typeof raw.reasoning === "string" && raw.reasoning) message.reasoning = raw.reasoning;
     if (typeof raw.modelName === "string") message.modelName = raw.modelName;

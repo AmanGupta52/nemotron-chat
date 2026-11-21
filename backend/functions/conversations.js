@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "./lib/db.js";
+import { deleteUserUploads } from "./lib/cloudinary.js";
 import {
   HttpError,
   json,
@@ -249,12 +250,18 @@ async function handler(req) {
     if (!id && url.searchParams.get("all") === "1") {
       await conversations.deleteMany({ userId: user._id });
       await messages.deleteMany({ userId: user._id });
+      await deleteUserUploads(db, user._id);
       return json({ message: "All conversations deleted." });
     }
     if (!id) throw new HttpError(400, "Conversation ID is required.");
     const result = await conversations.deleteOne(conversationOwnerFilter(user._id, id));
     if (!result.deletedCount) throw new HttpError(403, "You cannot access this conversation.");
+    const withFiles = await messages.find(
+      { ...messageOwnerFilter(user._id, id), "metadata.attachment.publicId": { $exists: true } },
+      { projection: { "metadata.attachment.publicId": 1 } },
+    ).toArray();
     await messages.deleteMany(messageOwnerFilter(user._id, id));
+    await deleteUserUploads(db, user._id, withFiles.map((m) => m.metadata.attachment.publicId));
     return json({ message: "Conversation deleted." });
   } catch (error) {
     return errorResponse(error);

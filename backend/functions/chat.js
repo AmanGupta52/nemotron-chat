@@ -36,6 +36,31 @@ const ENDPOINTS = {
 };
 const MAX_IMAGE_CHARS = 5_600_000;
 
+// Attachments are verified against the "uploads" collection (owner + stored Cloudinary link). The result is kept
+// in a WeakMap so a client can never smuggle in a fake "verified" file through the request body.
+const verifiedFiles = new WeakMap();
+
+async function hydrateAttachments(db, userId, messages, modelConfig) {
+  for (const message of messages) {
+    const publicId = message?.role === "user" && typeof message.attachment?.publicId === "string" ? message.attachment.publicId : "";
+    if (!publicId) continue;
+    const file = await db.collection("uploads").findOne({ _id: publicId, userId });
+    if (!file) continue;
+    verifiedFiles.set(message, file);
+    // Older turns only carry the stored link, so load the image back from Cloudinary for vision models.
+    if (file.kind === "image" && modelConfig.vision && !message.imageDataUrl) {
+      try {
+        const response = await fetch(file.url, { signal: AbortSignal.timeout(15_000) });
+        const type = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+        const bytes = Buffer.from(await response.arrayBuffer());
+        if (response.ok && /^image\/(png|jpe?g|webp)$/.test(type) && bytes.length <= 4_000_000) {
+          message.imageDataUrl = `data:${type};base64,${bytes.toString("base64")}`;
+        }
+      } catch { /* the model just will not see this image */ }
+    }
+  }
+}
+
 const json = (payload, status = 200) =>
   new Response(JSON.stringify(payload), {
     status,
@@ -47,8 +72,10 @@ const json = (payload, status = 200) =>
 
 function normalizeMessage(message, modelConfig) {
   if (!message || !["user", "assistant"].includes(message.role)) return null;
-  const text = typeof message.content === "string" ? message.content.trim() : "";
+  let text = typeof message.content === "string" ? message.content.trim() : "";
   const image = typeof message.imageDataUrl === "string" ? message.imageDataUrl : "";
+  const file = verifiedFiles.get(message);
+  if (file && file.kind !== "image") text = `${text}${text ? "\n\n" : ""}[Attached file: ${file.name} (${file.mime})]`;
 
   if (text.length > 16_000) {
     throw new Error("A message is too long. Keep each message under 16,000 characters.");
@@ -97,9 +124,15 @@ async function saveUserMessage(db, user, conversationId, messageId, message, pro
   let createdConversation = false;
   const content = typeof message.content === "string" ? message.content.trim() : "";
   const metadata = {};
-  if (message.imageDataUrl) {
+  const file = verifiedFiles.get(message);
+  if (file) {
+    const { url, publicId, kind, resourceType, name, mime, size, width, height } = file;
+    metadata.attachment = { url, publicId, kind, resourceType, name, mime, size, ...(width ? { width, height } : {}) };
+  }
+  if (message.imageDataUrl || file?.kind === "image") {
     metadata.hadImage = true;
-    if (typeof message.imageName === "string") metadata.imageName = message.imageName.slice(0, 160);
+    const imageName = file?.name || message.imageName;
+    if (typeof imageName === "string") metadata.imageName = imageName.slice(0, 160);
   }
 
   let conversation = await conversations.findOne(ownerFilter);
@@ -116,7 +149,7 @@ async function saveUserMessage(db, user, conversationId, messageId, message, pro
       modelId: modelConfig.id,
       modelName: modelConfig.name,
       messageCount: 0,
-      preview: content.slice(0, 240) || (metadata.hadImage ? "Image attachment" : ""),
+      preview: content.slice(0, 240) || (metadata.hadImage ? "Image attachment" : metadata.attachment ? "File attachment" : ""),
       createdAt: now,
       updatedAt: now,
     };
@@ -177,7 +210,7 @@ async function saveUserMessage(db, user, conversationId, messageId, message, pro
       provider,
       modelId: modelConfig.id,
       modelName: modelConfig.name,
-      preview: content.slice(0, 240) || (metadata.hadImage ? "Image attachment" : ""),
+      preview: content.slice(0, 240) || (metadata.hadImage ? "Image attachment" : metadata.attachment ? "File attachment" : ""),
       updatedAt: now,
     },
     ...(inserted ? { $inc: { messageCount: 1 } } : {}),
@@ -426,6 +459,7 @@ async function handler(req) {
   let messages;
   try {
     const recent = body.messages.slice(-20);
+    await hydrateAttachments(await getDb(), auth.user._id, recent, modelConfig);
     const totalImageChars = recent.reduce(
       (sum, message) => sum + (typeof message?.imageDataUrl === "string" ? message.imageDataUrl.length : 0),
       0,

@@ -30,8 +30,9 @@ const { default: auth } = await import("./functions/auth.js");
 const { default: chat } = await import("./functions/chat.js");
 const { default: conversations } = await import("./functions/conversations.js");
 const { default: models } = await import("./functions/models.js");
+const { default: upload } = await import("./functions/upload.js");
 
-const ROUTES = { account, auth, chat, conversations, models };
+const ROUTES = { account, auth, chat, conversations, models, upload };
 const PORT = Number(process.env.PORT) || 8787;
 // Render, Railway and Fly put a proxy in front of the app; without this every visitor would share one IP address.
 const TRUST_PROXY = ["1", "true", "yes"].includes(String(process.env.TRUST_PROXY || "").toLowerCase())
