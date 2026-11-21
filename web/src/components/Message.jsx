@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Brain, Check, ChevronRight, Copy, FileText, ImageIcon, Pencil, RotateCcw, Sparkles } from "lucide-react";
+import { createPortal } from "react-dom";
+import { AlertTriangle, Brain, Check, ChevronRight, Copy, Download, FileText, ImageIcon, Pencil, RotateCcw, Sparkles, X } from "lucide-react";
 import { splitThink } from "../lib/think.js";
 
 const Markdown = lazy(() => import("./Markdown.jsx"));
@@ -38,10 +39,58 @@ function CopyButton({ text, onError, label = "Copy" }) {
   );
 }
 
+// Full-screen image viewer inside the app (closes with the X, a tap outside the image, or Esc).
+function ImageViewer({ src, name, downloadUrl, onClose }) {
+  useEffect(() => {
+    const onKey = (event) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = previous; };
+  }, [onClose]);
+
+  const bar = {
+    position: "absolute", top: 0, left: 0, right: 0, display: "flex", alignItems: "center", gap: 8,
+    padding: "max(10px, env(safe-area-inset-top)) 12px 10px", color: "#fff",
+    background: "linear-gradient(rgba(0,0,0,.6), transparent)",
+  };
+  const btn = {
+    display: "inline-grid", placeItems: "center", width: 38, height: 38, borderRadius: 99,
+    border: 0, background: "rgba(255,255,255,.16)", color: "#fff", cursor: "pointer",
+  };
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={name || "Image"}
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,.92)", display: "grid", placeItems: "center" }}
+    >
+      <div style={bar} onClick={(e) => e.stopPropagation()}>
+        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14 }}>{name}</span>
+        {downloadUrl && (
+          <a href={downloadUrl} download={name || "image"} target="_blank" rel="noopener noreferrer" style={btn} aria-label="Download image" title="Download">
+            <Download size={18} />
+          </a>
+        )}
+        <button type="button" style={btn} onClick={onClose} aria-label="Close image" title="Close"><X size={20} /></button>
+      </div>
+      <img
+        src={src}
+        alt={name || "Image"}
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: "100vw", maxHeight: "100vh", objectFit: "contain", touchAction: "pinch-zoom" }}
+      />
+    </div>,
+    document.body,
+  );
+}
+
 function UserMessage({ message, canEdit, onEdit, onError }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
   const areaRef = useRef(null);
+  const [viewer, setViewer] = useState(null); // { src, name, downloadUrl }
 
   useEffect(() => {
     if (!editing) return;
@@ -61,12 +110,26 @@ function UserMessage({ message, canEdit, onEdit, onError }) {
   return (
     <article className="msg user">
       <div className="user-wrap">
-        {message.imageDataUrl && <img className="msg-image" src={message.imageDataUrl} alt={message.imageName || "Attached image"} />}
-        {!message.imageDataUrl && message.attachment?.kind === "image" && (
-          <a href={message.attachment.url} target="_blank" rel="noopener noreferrer">
-            <img className="msg-image" src={message.attachment.url.replace("/upload/", "/upload/w_800,q_auto,f_auto/")} alt={message.attachment.name || "Attached image"} loading="lazy" />
-          </a>
+        {message.imageDataUrl && (
+          <img
+            className="msg-image"
+            src={message.imageDataUrl}
+            alt={message.imageName || "Attached image"}
+            style={{ cursor: "zoom-in" }}
+            onClick={() => setViewer({ src: message.imageDataUrl, name: message.imageName, downloadUrl: message.attachment?.url })}
+          />
         )}
+        {!message.imageDataUrl && message.attachment?.kind === "image" && (
+          <img
+            className="msg-image"
+            src={message.attachment.url.replace("/upload/", "/upload/w_800,q_auto,f_auto/")}
+            alt={message.attachment.name || "Attached image"}
+            loading="lazy"
+            style={{ cursor: "zoom-in" }}
+            onClick={() => setViewer({ src: message.attachment.url, name: message.attachment.name, downloadUrl: message.attachment.url })}
+          />
+        )}
+        {viewer && <ImageViewer {...viewer} onClose={() => setViewer(null)} />}
         {message.attachment && message.attachment.kind !== "image" && (
           <a className="img-chip" href={message.attachment.url} target="_blank" rel="noopener noreferrer" download={message.attachment.name}>
             <FileText size={13} /> {message.attachment.name}
