@@ -17,7 +17,8 @@ import { MAX_UPLOAD_BYTES, dataUrlToBlob, uploadFile } from "./lib/upload.js";
 import { readDelta, readEvents } from "./lib/stream.js";
 import { splitThink } from "./lib/think.js";
 import { useAuth } from "./auth/AuthContext.jsx";
-import { ACCOUNT_API, apiFetch, apiRequest, CHAT_API, CONVERSATIONS_API, MODELS_API } from "./auth/api.js";
+import { ACCOUNT_API, apiFetch, apiRequest, CHAT_API, CONVERSATIONS_API, IS_NATIVE, MODELS_API } from "./auth/api.js";
+import { runBackHandler, showToast, useBackHandler } from "./lib/backStack.js";
 import {
   ForgotPasswordPage, LoginPage, ProfilePage, RegisterPage, ResetPasswordPage,
   SettingsPage, VerifyEmailPage,
@@ -197,6 +198,9 @@ function Workbench() {
   const [busyChatId, setBusyChatId] = useState(null);
   const [banner, setBanner] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  useBackHandler(drawerOpen, () => setDrawerOpen(false));
+  useBackHandler(confirmLogout, () => setConfirmLogout(false));
   const [collapsed, setCollapsed] = useState(() => readStore(SIDEBAR_KEY) === "1");
   const [dragActive, setDragActive] = useState(false);
   const [showJump, setShowJump] = useState(false);
@@ -905,7 +909,7 @@ function Workbench() {
         onExport={exportChat}
         onClearAll={clearAll}
         user={user}
-        onLogout={logoutUser}
+        onLogout={() => setConfirmLogout(true)}
         onSearch={loadConversationList}
         onImport={importLocalChats}
         localImportCount={localChats.length}
@@ -1010,6 +1014,27 @@ function Workbench() {
           onNotice={(text) => flash(text, "info")}
         />
       </main>
+      {confirmLogout && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm log out"
+          onClick={() => setConfirmLogout(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,.55)", display: "grid", placeItems: "center", padding: 16 }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{ width: "min(360px, 100%)", background: "var(--panel)", color: "var(--text)", border: "1px solid var(--line)", borderRadius: 16, padding: 20, boxShadow: "0 20px 60px rgba(0,0,0,.4)" }}
+          >
+            <h2 style={{ margin: "0 0 6px", fontSize: 18 }}>Log out?</h2>
+            <p style={{ margin: "0 0 18px", color: "var(--muted)", fontSize: 14, lineHeight: 1.45 }}>You will need to sign in again to see your chats.</p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button type="button" className="btn ghost" onClick={() => setConfirmLogout(false)} autoFocus>Cancel</button>
+              <button type="button" className="btn primary" onClick={() => { setConfirmLogout(false); logoutUser(); }}>Log out</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1023,7 +1048,41 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+// Android back button (packaged app): close overlays, then go to the previous page, and exit only from the main screen.
+const ROOT_PATHS = ["/", "/chat", "/dashboard", "/login"];
+function useNativeBackButton() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathRef = useRef(location.pathname);
+  pathRef.current = location.pathname;
+  const lastBackRef = useRef(0);
+
+  useEffect(() => {
+    const plugin = window.Capacitor?.Plugins?.App;
+    if (!IS_NATIVE || typeof plugin?.addListener !== "function") return undefined;
+    let handle = null;
+    let cancelled = false;
+    Promise.resolve(plugin.addListener("backButton", () => {
+      if (runBackHandler()) return;
+      const path = pathRef.current;
+      if (!ROOT_PATHS.includes(path)) {
+        if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
+        else navigate(["/profile", "/settings"].includes(path) ? "/chat" : "/login", { replace: true });
+        return;
+      }
+      const now = Date.now();
+      if (now - lastBackRef.current < 2000) { plugin.exitApp?.(); return; }
+      lastBackRef.current = now;
+      showToast("Press back again to exit");
+    })).then((listener) => {
+      if (cancelled) listener?.remove?.(); else handle = listener;
+    });
+    return () => { cancelled = true; handle?.remove?.(); };
+  }, [navigate]);
+}
+
 export default function App() {
+  useNativeBackButton();
   const { user, loading, connectionError, retry } = useAuth();
   let home;
   if (loading) home = <Splash />;

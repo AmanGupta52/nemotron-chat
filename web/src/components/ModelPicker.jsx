@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Eye, RefreshCw, Search } from "lucide-react";
+import { useBackHandler } from "../lib/backStack.js";
 
 function contextLabel(n) {
   if (!Number.isFinite(n) || n <= 0) return "";
@@ -12,6 +13,7 @@ const LABELS = { nvidia: "NVIDIA", openrouter: "OpenRouter" };
 
 export default function ModelPicker({ providers, selection, current, onSelect, onRefresh, loading }) {
   const [open, setOpen] = useState(false);
+  useBackHandler(open, () => setOpen(false));
   const [tab, setTab] = useState(selection.provider);
   const [query, setQuery] = useState("");
   const wrapRef = useRef(null);

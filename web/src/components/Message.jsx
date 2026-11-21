@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Brain, Check, ChevronRight, Copy, Download, FileText, ImageIcon, Pencil, RotateCcw, Sparkles, X } from "lucide-react";
 import { splitThink } from "../lib/think.js";
+import { useBackHandler } from "../lib/backStack.js";
 
 const Markdown = lazy(() => import("./Markdown.jsx"));
 
@@ -41,6 +42,7 @@ function CopyButton({ text, onError, label = "Copy" }) {
 
 // Full-screen image viewer inside the app (closes with the X, a tap outside the image, or Esc).
 function ImageViewer({ src, name, downloadUrl, onClose }) {
+  useBackHandler(true, onClose);
   useEffect(() => {
     const onKey = (event) => { if (event.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
